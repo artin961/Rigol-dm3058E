@@ -1,6 +1,8 @@
-# GwInstek GDM-8341 Multimeter OSD & Control for Linux
-gdm-8341 Multimeter OSD & Control for linux with keyboard mode selection
+# RIGOL DM3058(E) Multimeter OSD & Control for Linux
+RIGOL DM3058(E) Multimeter OSD & Control for linux with keyboard mode selection
+Based on original Paul Daniels code for GDM-8341 https://github.com/inflex/gdm-8341  
 
+It works also with DM3068 but displays as 5 ½ digits 
 # Requirements
 
 You will require the SDL2 development lib in linux
@@ -23,7 +25,7 @@ Build
    
 Run from the command line
 
-	./gdm-8341-sdl -p /dev/ttyUSB0
+	./dm3058e-sdl -p /dev/ttyUSB0
 
 
 ### Keyboard bindings
@@ -36,4 +38,4 @@ Run from the command line
 	win-alt-c : change to continuity mode
 	win-alt-d : change to diode mode
 
-# gdm-8341
+# DM3058(E) 
