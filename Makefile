@@ -12,16 +12,16 @@ LIBS=-lSDL2_ttf
 CC=gcc
 GCC=g++
 
-OBJ=gdm-8341-sdl
+OBJ=dm3058e-sdl
 
 default: $(OBJ)
 	@echo
 	@echo
 
-gdm-8341-sdl: gdm-8341-sdl.cpp
+dm3058e-sdl: dm3058e-sdl.cpp
 	@echo Build Release $(BV)
 	@echo Build Date $(BD)
-	${GCC} ${CFLAGS} $(COMPONENTS) gdm-8341-sdl.cpp $(SDLFLAGS) $(LIBS) ${OFILES} -o ${OBJ} 
+	${GCC} ${CFLAGS} $(COMPONENTS) dm3058e-sdl.cpp $(SDLFLAGS) $(LIBS) ${OFILES} -o ${OBJ} 
 
 clean:
 	rm -v ${OBJ} 
