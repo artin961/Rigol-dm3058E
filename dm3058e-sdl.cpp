@@ -85,16 +85,18 @@ struct mmode_s {
 
 
 #define READSTATE_NONE		0
-#define READSTATE_READING_FUNCTION	1
-#define READSTATE_FINISHED_FUNCTION 2
-#define READSTATE_READING_VAL 3
-#define READSTATE_FINISHED_VAL 4
-#define READSTATE_READING_RANGE 5
-#define READSTATE_FINISHED_RANGE 6
-#define READSTATE_READING_CONTLIMIT 7
-#define READSTATE_FINISHED_CONTLIMIT 8
-#define READSTATE_FINISHED_ALL 9
-#define READSTATE_DONE		10
+#define READSTATE_READING_MEASURE 1
+#define READSTATE_FINISHED_MEASURE 2
+#define READSTATE_READING_FUNCTION 3
+#define READSTATE_FINISHED_FUNCTION 4
+#define READSTATE_READING_VAL 5
+#define READSTATE_FINISHED_VAL 6
+#define READSTATE_READING_RANGE 7
+#define READSTATE_FINISHED_RANGE 8
+#define READSTATE_READING_CONTLIMIT 9
+#define READSTATE_FINISHED_CONTLIMIT 10
+#define READSTATE_FINISHED_ALL 11
+#define READSTATE_DONE		12
 #define READSTATE_ERROR 999
 
 #define READ_BUF_SIZE 4096
@@ -114,16 +116,11 @@ struct mmode_s mmodes[] = {
 };
 
 const char SCPI_FUNC[] = ":FUNC?\r\n";
-<<<<<<< HEAD
-const char SCPI_CONT_THRESHOLD[] = "SENS:CONT:THR?\r\n";
-
-//const char SCPI_LOCAL[] = "SYST:LOC\r\n";
-=======
+const char SCPI_MEAS[] = ":MEAS?\r\n";
 
 //const char SCPI_VAL2[] = "VAL2?\r\n";//RIGOL DOESNT SUPPORT THAT
 //const char SCPI_CONT_THRESHOLD[] = "SENS:CONT:THR?\r\n";//RIGOL DOESNT SUPPORT THAT
 //const char SCPI_LOCAL[] = "SYST:LOC\r\n";//RIGOL DOESNT SUPPORT THAT
->>>>>>> 728faad77d8750cfcec9a0d673b225d86728ac99
 
 const char SEPARATOR_DP[] = ".";
 
@@ -732,22 +729,14 @@ int main ( int argc, char **argv ) {
 			{
 				case SDL_KEYDOWN:
 					if (event.key.keysym.sym == SDLK_q) {
-<<<<<<< HEAD
-						//data_write( &g, SCPI_LOCAL, strlen(SCPI_LOCAL) );
-=======
 						////data_write( &g, SCPI_LOCAL, strlen(SCPI_LOCAL) );  //RIGOL DOESNT SUPPORT THAT
->>>>>>> 728faad77d8750cfcec9a0d673b225d86728ac99
 						quit = true;
 					}
 					if (event.key.keysym.sym == SDLK_p) {
 						paused ^= 1;
-<<<<<<< HEAD
-						//if (paused == true) data_write( &g, SCPI_LOCAL, strlen(SCPI_LOCAL) );
-=======
 					    g.read_state=READSTATE_NONE;  //TO PREVENT NEXT MEAS COMMAND TO SWITCH THE RANGE BACK 
 						
 						////if (paused == true) data_write( &g, SCPI_LOCAL, strlen(SCPI_LOCAL) ); //RIGOL DOESNT SUPPORT THAT
->>>>>>> 728faad77d8750cfcec9a0d673b225d86728ac99
 					}
 					break;
 				case SDL_QUIT:
@@ -769,11 +758,27 @@ int main ( int argc, char **argv ) {
 				case READSTATE_NONE:
 					tcflush(g.serial_params.fd, TCIOFLUSH); // clear buffer TO PREVENT NEX READ ERROR
 				case READSTATE_DONE:
-					data_write( &g, SCPI_FUNC, strlen(SCPI_FUNC));
+					data_write( &g, SCPI_MEAS, strlen(SCPI_MEAS));
 					g.bp = g.read_buffer; *(g.bp) = '\0'; g.bytes_remaining = READ_BUF_SIZE;
-					g.read_state = READSTATE_READING_FUNCTION;
+					//g.read_state = READSTATE_READING_FUNCTION;
+					g.read_state = READSTATE_READING_MEASURE;
 					break;
-
+					
+				case READSTATE_FINISHED_MEASURE:
+					if (strcmp(g.read_buffer, "FALSE")==0) {
+							if (g.debug) fprintf(stderr,"%s: NO NEW MEASURMENT COMPLETE\n", g.read_buffer);
+							data_write( &g, SCPI_MEAS, strlen(SCPI_MEAS));
+							g.bp = g.read_buffer; *(g.bp) = '\0'; g.bytes_remaining = READ_BUF_SIZE;
+							g.read_state = READSTATE_READING_MEASURE;
+						}
+					if (strcmp(g.read_buffer, "TRUE")==0) {
+							if (g.debug) fprintf(stderr,"%s: WE HAVE A NEW MEASUREMENT\n", g.read_buffer);
+							data_write( &g, SCPI_FUNC, strlen(SCPI_FUNC));
+							g.bp = g.read_buffer; *(g.bp) = '\0'; g.bytes_remaining = READ_BUF_SIZE;
+							g.read_state = READSTATE_READING_FUNCTION;
+					}
+					break;
+					
 				case READSTATE_FINISHED_FUNCTION:
 					// check the value of the buffer and determine
 					// which mode-index (mi) we need for later --- idiot!
