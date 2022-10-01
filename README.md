@@ -1,6 +1,7 @@
 # RIGOL DM3058(E) Multimeter OSD & Control for Linux
 RIGOL DM3058(E) Multimeter OSD & Control for linux with keyboard mode selection
-Based on original Paul Daniels code for GDM-8341 https://github.com/inflex/gdm-8341  
+Based on original Paul Daniels code for GDM-8341 https://github.com/inflex/gdm-8341
+Rigol also uses SCPI commands. Some of them are different so the code is adapted accordingly. It also check if a measurement is compleated becouse the dmm can be in single or manual trigger mode.
 
 It works also with DM3068 but displays as 5 ½ digits 
 # Requirements
@@ -19,6 +20,11 @@ Because this meter locks the front panel during USB communications I have added 
 Build	 
 
 	(linux) make
+	By default it will produce two binaries. gdm-8341-sdl and dm3058e-sdl
+	You can compile either one seperatly be executing
+	(linux) make gdm-8341-sdl
+	or 
+	(linux) make dm3058e-sdl
 	
 # Usage
 	
