@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
+#include <sys/file.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <termios.h>
@@ -63,6 +64,7 @@ struct mmode_s {
 	char label[50];
 	char query[50];
 	char units[10];
+	char logmode[10];
 };
 
 #define MMODES_VOLT_DC 0
@@ -97,19 +99,19 @@ struct mmode_s {
 #define READ_BUF_SIZE 4096
 
 struct mmode_s mmodes[] = { 
-	{"VOLT", "Volts DC", "MEAS:VOLT:DC?\r\n", "V DC"}, 
-	{"VOLT:AC", "Volts AC", "MEAS:VOLT:AC?\r\n", "V AC"},
-	{"VOLT:DCAC", "Volts DC/AC", "MEAS:VOLT:DCAC?\r\n", "V DC/AC"},
-	{"CURR", "Current DC", "MEAS:CURR:DC?\r\n", "A DC"},
-	{"CURR:AC", "Current AC", "MEAS:CURR:AC?\r\n", "A AC"},
-	{"CURR:DCAC", "Current DC/AC", "MEAS:CURR:DCAC?\r\n", "A DC/AC"},
-	{"RES", "Resistance", "MEAS:RES?\r\n", oo },
-	{"FREQ", "Frequency", "MEAS:FREQ?\r\n", "Hz" },
-	{"PER", "Period", "MEAS:PER?\r\n", "s"},
-	{"TEMP", "Temperature", "MEAS:TEMP:TCO?\r\n", "C"},
-	{"DIOD", "Diode", "MEAS:DIOD?\r\n", "V"},
-	{"CONT", "Continuity", "MEAS:CONT?\r\n", oo},
-	{"CAP", "Capacitance", "MEAS:CAP?\r\n", "F"}
+	{"VOLT", "Volts DC", "MEAS:VOLT:DC?\r\n", "V DC", "VOLTSDC"}, 
+	{"VOLT:AC", "Volts AC", "MEAS:VOLT:AC?\r\n", "V AC", "VOLTSAC"},
+	{"VOLT:DCAC", "Volts DC/AC", "MEAS:VOLT:DCAC?\r\n", "V DC/AC", "VOLTSDC"},
+	{"CURR", "Current DC", "MEAS:CURR:DC?\r\n", "A DC", "AMPSDC"},
+	{"CURR:AC", "Current AC", "MEAS:CURR:AC?\r\n", "A AC", "AMPSAC"},
+	{"CURR:DCAC", "Current DC/AC", "MEAS:CURR:DCAC?\r\n", "A DC/AC", "AMPSDC"},
+	{"RES", "Resistance", "MEAS:RES?\r\n", oo, "OHMS" },
+	{"FREQ", "Frequency", "MEAS:FREQ?\r\n", "Hz", "FREQ" },
+	{"PER", "Period", "MEAS:PER?\r\n", "s", "" },
+	{"TEMP", "Temperature", "MEAS:TEMP:TCO?\r\n", "C", "TEMP"},
+	{"DIOD", "Diode", "MEAS:DIOD?\r\n", "V", "DIODE" },
+	{"CONT", "Continuity", "MEAS:CONT?\r\n", oo, "OHMS" },
+	{"CAP", "Capacitance", "MEAS:CAP?\r\n", "F", "CAP" }
 };
 
 const char SCPI_FUNC[] = "SENS:FUNC1?\r\n";
@@ -121,8 +123,12 @@ const char SCPI_RANGE[] = "CONF:RANG?\r\n";
 
 const char SEPARATOR_DP[] = ".";
 
+#ifndef PATH_MAX 
+#define PATH_MAX 4096
+#endif
+
 struct serial_params_s {
-	char *device;
+	char device[PATH_MAX];
 	int fd, n;
 	int cnt, size, s_cnt;
 	struct termios oldtp, newtp;
@@ -135,7 +141,7 @@ struct glb {
 	uint16_t flags;
 	uint16_t error_flag;
 	char *output_file;
-	char *device;
+	char device[PATH_MAX];
 
 	int usb_fhandle;
 
@@ -211,7 +217,7 @@ int init(struct glb *g) {
 	g->error_flag = 0;
 	g->output_file = NULL;
 	g->interval = 100000; // 100ms / 100,000us interval of sleeping between frames
-	g->device = NULL;
+	g->device[0] = '\0';
 	g->comms_mode = CMODE_NONE;
 
 	g->serial_parameters_string = NULL;
@@ -247,6 +253,7 @@ void show_help(void) {
 			"\t-t <interval> (sleep delay between samples, default 100,000us)\r\n"
 			"\t-p <comport>: Set the com port for the meter, eg: -p /dev/ttyUSB0\r\n"
 			"\t-s <115200|57600|38400|19200|9600> serial speed (default 115200)\r\n"
+			"\t-o <output file>\r\n"
 			"\r\n"
 			"\texample: gdm-8341-sdl -p /dev/ttyUSB0 -s 38400\r\n"
 			, BUILD_VER
@@ -308,7 +315,7 @@ int parse_parameters(struct glb *g, int argc, char **argv ) {
 					 */
 					i++;
 					if (i < argc) {
-						g->device = argv[i];
+						snprintf(g->device, PATH_MAX -1, "%s", argv[i]);
 					} else {
 						fprintf(stdout,"Insufficient parameters; -p <usb TMC port ie, /dev/usbtmc2>\n");
 						exit(1);
@@ -409,7 +416,7 @@ int parse_parameters(struct glb *g, int argc, char **argv ) {
  *
  *
  */
-void open_port( struct glb *g ) {
+int open_port( struct glb *g ) {
 
 	struct serial_params_s *s = &(g->serial_params);
 	char *p = g->serial_parameters_string;
@@ -422,6 +429,12 @@ void open_port( struct glb *g ) {
 	s->fd = open( s->device, O_RDWR | O_NOCTTY | O_NDELAY );
 	if (s->fd <0) {
 		perror( s->device );
+	}
+
+	r = flock(s->fd, LOCK_EX | LOCK_NB);
+	if (r == -1) {
+		fprintf(stderr, "%s:%d: Unable to set lock on %s, Error '%s'\n", FL, s->device, strerror(errno) );
+		return -1;
 	}
 
 	fcntl(s->fd,F_SETFL,0);
@@ -451,11 +464,87 @@ void open_port( struct glb *g ) {
 	r = tcsetattr(s->fd, TCSANOW, &(s->newtp));
 	if (r) {
 		fprintf(stderr,"%s:%d: Error setting terminal (%s)\n", FL, strerror(errno));
-		exit(1);
+		return -1;
 	}
 
 	if (g->debug) fprintf(stderr,"Serial port opened, FD[%d]\n", s->fd);
+	return 0;
 }
+
+#define PORT_OK 0
+#define PORT_CANT_LOCK 10
+#define PORT_INVALID 11
+#define PORT_CANT_SET 12
+#define PORT_NO_SUCCESS -1
+
+int find_port( struct glb *g ) {
+
+	/*
+		For this multimeter, we actually *want* the read to time out
+		because it means that it's not just spewing out data, ie not
+		a SCPI device
+	 */
+	struct serial_params_s *s = &(g->serial_params);
+
+	for ( int port_number = 0; port_number < 10; port_number++ ) {
+		snprintf(s->device, sizeof(s->device) -1, "/dev/ttyUSB%d", port_number);
+		if ( g->debug ) fprintf(stderr,"Testing port %s\n", s->device);
+		int r = open_port( g );
+		if (r == PORT_OK ) {
+			int bytes_read = 0;
+			fd_set set;
+			struct timeval timeout;
+
+			FD_ZERO(&set);
+			FD_SET(s->fd, &set);
+
+			timeout.tv_sec = 0;
+			timeout.tv_usec = 300000; // 0.3 seconds
+
+			{
+				char temp_char = 0;
+				int rv;
+
+				bytes_read = 0;
+				rv = select(s->fd +1, &set, NULL, NULL, &timeout);
+				if (g->debug) fprintf(stderr,"select result = %d\n", rv);
+				if (rv == -1) {
+					break;
+				} else if (rv == 0 ) {
+				} else bytes_read = read(s->fd, &temp_char, 1);
+
+				if (g->debug) fprintf(stderr,"%d bytes read after select\n", bytes_read);
+				if (bytes_read > 0) {
+					/* 
+						not our meter!
+					 */
+					break;
+				} else if ((rv == 0) && (bytes_read == 0)) {
+					char buf[100];
+
+					if (g->debug) fprintf(stderr,"Testing port with *IDN? query\n");
+					size_t bytes_written = write( s->fd, "*IDN?\r\n", strlen("*IDN?\r\n"));
+					if (bytes_written > 0) {
+						size_t bytes_read = read(s->fd, buf, 99);
+						if (bytes_read > 0) {
+							buf[bytes_read] = '\0';
+							if (g->debug) fprintf(stderr," %ld bytes read, '%s'\n", bytes_read, buf);
+							if (strstr(buf,"GDM8341")) {
+								if (g->debug) fprintf(stderr,"Port %s selected\n", s->device);
+								return PORT_OK;
+							}
+						}
+					}
+
+				}
+			} 
+
+			close(s->fd);
+		} // port OK
+	} // for each port
+	return PORT_NO_SUCCESS;
+}
+
 
 
 /*
@@ -555,8 +644,6 @@ int main ( int argc, char **argv ) {
 	SDL_Surface *surface, *surface_2;
 	SDL_Texture *texture, *texture_2;
 
-	char linetmp[SSIZE]; // temporary string for building main line of text
-
 	struct glb g;        // Global structure for passing variables around
 	char tfn[4096];
 	bool quit = false;
@@ -581,7 +668,7 @@ int main ( int argc, char **argv ) {
 	if (g.debug) fprintf(stdout,"START\n");
 
 	g.comms_mode = CMODE_SERIAL;
-	g.serial_params.device = g.device;
+	snprintf(g.serial_params.device, PATH_MAX , "%s", g.device);
 
 	/* 
 	 * check paramters
@@ -593,7 +680,8 @@ int main ( int argc, char **argv ) {
 	if (g.output_file) snprintf(tfn,sizeof(tfn),"%s.tmp",g.output_file);
 
 
-	open_port( &g );
+	find_port( &g );
+	//		  open_port( &g );
 
 	Display*    dpy     = XOpenDisplay(0);
 	Window      root    = DefaultRootWindow(dpy);
@@ -647,18 +735,6 @@ int main ( int argc, char **argv ) {
 	}
 	SDL_RendererInfo info;
 	SDL_GetRendererInfo( renderer, &info );
-	fprintf(stderr,"Renderer Information --\n"\
-			"Name: %s\n"\
-			"Flags: %lX\n"\
-			"%s%s%s%s\n"
-			"---\n"\
-			, info.name
-			, info.flags
-			, info.flags&SDL_RENDERER_SOFTWARE?"Software":""
-			, info.flags&SDL_RENDERER_ACCELERATED?"Accelerated":""
-			, info.flags&SDL_RENDERER_PRESENTVSYNC?"Vsync Sync":""
-			, info.flags&SDL_RENDERER_TARGETTEXTURE?"Target texture supported":""
-			);
 
 	/* Select the color for drawing. It is set to red here. */
 	SDL_SetRenderDrawColor(renderer, g.background_color.r, g.background_color.g, g.background_color.b, 255 );
@@ -672,8 +748,8 @@ int main ( int argc, char **argv ) {
 	 * and hope that the almighty PID 1 will reap us
 	 *
 	 */
-	char line1[1024];
-	char line2[1024];
+	char line1[4096];
+	char line2[5000];
 
 	while (!quit) {
 
@@ -699,8 +775,11 @@ int main ( int argc, char **argv ) {
 							case XK_d:
 								data_write( &g, mmodes[MMODES_DIOD].query, strlen(mmodes[MMODES_DIOD].query) );
 								break;
-							case XK_f:
+							case XK_u:
 								data_write( &g, mmodes[MMODES_CAP].query, strlen(mmodes[MMODES_CAP].query) );
+								break;
+							case XK_f:
+								data_write( &g, mmodes[MMODES_FREQ].query, strlen(mmodes[MMODES_FREQ].query) );
 								break;
 							default:
 								break;
@@ -731,8 +810,6 @@ int main ( int argc, char **argv ) {
 					break;
 			}
 		}
-
-		linetmp[0] = '\0';
 
 
 		if (!paused && !quit) {
@@ -810,6 +887,7 @@ int main ( int argc, char **argv ) {
 
 			if (g.read_state == READSTATE_FINISHED_ALL) {
 				g.read_state = READSTATE_DONE;
+
 
 				switch (g.mode_index) {
 					case MMODES_VOLT_DC:
@@ -893,7 +971,7 @@ int main ( int argc, char **argv ) {
 							snprintf(g.range,sizeof(g.range),"5M%s",oo); }
 						else if (strcmp(g.range, "50E+6")==0){ snprintf(g.value, sizeof(g.value), "%06.3f M%s", g.v /1000000, oo);
 							snprintf(g.range,sizeof(g.range),"50M%s",oo); }
-						if (g.v >= 51000000000000) snprintf(g.value, sizeof(g.value), "O.L");
+						if (g.v >= 51000000000000) snprintf(g.value, sizeof(g.value), "OL");
 						break;
 
 					case MMODES_CAP:
@@ -907,7 +985,7 @@ int main ( int argc, char **argv ) {
 							snprintf(g.range,sizeof(g.range),"5%sF",uu); }
 						else if (strcmp(g.range, "5E-5")==0){ snprintf(g.value, sizeof(g.value), "% 06.2f %sF", g.v *1E+6, uu);
 							snprintf(g.range,sizeof(g.range),"50%sF",uu); }
-						if (g.v >= 51000000000000) snprintf(g.value, sizeof(g.value), "O.L");
+						if (g.v >= 51000000000000) snprintf(g.value, sizeof(g.value), "OL");
 						break;
 
 
@@ -927,7 +1005,7 @@ int main ( int argc, char **argv ) {
 					case MMODES_DIOD:
 						{ 
 							if (g.v > 9.999) {
-								snprintf(g.value, sizeof(g.value), "OPEN / OL");
+								snprintf(g.value, sizeof(g.value), "OL / OPEN");
 							} else {
 								snprintf(g.value, sizeof(g.value), "%06.4f V", g.v);
 							}
@@ -1002,12 +1080,11 @@ int main ( int argc, char **argv ) {
 			 */
 			if (!fileExists(g.output_file)) {
 				FILE *f;
-				if (g.debug) fprintf(stderr,"%s:%d: output filename = %s\r\n", FL, g.output_file);
 				f = fopen(tfn,"w");
 				if (f) {
-					fprintf(f,"%s", linetmp);
-					if (g.debug) fprintf(stderr,"%s:%d: %s => %s\r\n", FL, linetmp, tfn);
+					fprintf(f,"%s\t%s", line1, mmodes[g.mode_index].logmode);
 					fclose(f);
+					chmod(tfn, S_IROTH|S_IWOTH|S_IRUSR|S_IWUSR);
 					rename(tfn, g.output_file);
 				}
 			}
@@ -1018,6 +1095,12 @@ int main ( int argc, char **argv ) {
 	if (g.comms_mode == CMODE_USB) {
 		close(g.usb_fhandle);
 	}
+
+
+
+	close(g.serial_params.fd);
+	flock(g.serial_params.fd, LOCK_UN);
+
 
 	XCloseDisplay(dpy);
 
