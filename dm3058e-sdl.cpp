@@ -518,6 +518,9 @@ int find_port(struct glb *g)
 		int r = open_port(g);
 		if (r == PORT_OK)
 		{
+			char temp1[100];
+			memset(temp1,'\0',sizeof(temp1));
+			read(s->fd, &temp1, sizeof(temp1));
 			int bytes_read = 0;
 			fd_set set;
 			struct timeval timeout;
@@ -529,7 +532,7 @@ int find_port(struct glb *g)
 			timeout.tv_usec = 300000; // 0.3 seconds
 
 			{
-				char temp_char = 0;
+				char temp_char	 = 0;
 				int rv;
 
 				bytes_read = 0;
@@ -544,7 +547,7 @@ int find_port(struct glb *g)
 				{
 				}
 				else
-					bytes_read = read(s->fd, &temp_char, 1);
+					bytes_read = read(s->fd, &temp_char, sizeof(temp_char));
 
 				if (g->debug)
 					fprintf(stderr, "%d bytes read after select\n", bytes_read);
@@ -570,7 +573,7 @@ int find_port(struct glb *g)
 							buf[bytes_read] = '\0';
 							if (g->debug)
 								fprintf(stderr, " %ld bytes read, '%s'\n", bytes_read, buf);
-							if (strstr(buf, "GDM8341"))
+							if (strstr(buf, "DM3058")||strstr(buf, "DM3068"))
 							{
 								if (g->debug)
 									fprintf(stderr, "Port %s selected\n", s->device);
